@@ -4,22 +4,53 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 public class Task {
+
     private final String id;
     private final String title;
     private final String description;
     private final String assigneeId;
     private final LocalDateTime createdAt;
-    private final LocalDateTime updatedAt;
 
-    private String status;
+    private LocalDateTime updatedAt;
+    private Status status;
+
+    public enum Status {
+        TODO {
+            @Override
+            public boolean canTransitionTo(Status next) {
+                return next == IN_PROGRESS || next == CANCELLED;
+            }
+        },
+        IN_PROGRESS {
+            @Override
+            public boolean canTransitionTo(Status next) {
+                return next == DONE || next == CANCELLED;
+            }
+        },
+        DONE {
+            @Override
+            public boolean canTransitionTo(Status next) {
+                return false;
+            }
+        },
+        CANCELLED {
+            @Override
+            public boolean canTransitionTo(Status next) {
+                return false;
+            }
+        };
+
+        public abstract boolean canTransitionTo(Status next);
+    }
 
     private Task(Builder builder) {
-        this.id = builder.id;
-        this.title = builder.title;
+        this.id = builder.id != null ? builder.id : UUID.randomUUID().toString();
+        this.createdAt = builder.createdAt != null ? builder.createdAt : LocalDateTime.now();
+        this.updatedAt = builder.updatedAt != null ? builder.updatedAt : this.createdAt;
+        this.title = builder.title != null ? builder.title : Status.TODO.toString();
+
         this.description = builder.description;
         this.assigneeId = builder.assigneeId;
-        this.createdAt = builder.createdAt;
-        this.updatedAt = builder.updatedAt;
         this.status = builder.status;
     }
 
@@ -47,8 +78,21 @@ public class Task {
         return updatedAt;
     }
 
-    public String getStatus() {
+    public Status getStatus() {
         return status;
+    }
+
+    public void transitionTo(Status targetStatus) {
+        if (targetStatus == null || targetStatus == this.status) {
+            throw new IllegalArgumentException("Target status cannot be null or the same as the current status");
+        }
+
+        if (!this.status.canTransitionTo(targetStatus)) {
+            throw new IllegalStateException("Invalid transition!");
+        }
+
+        this.status = targetStatus;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public static class Builder {
@@ -58,13 +102,14 @@ public class Task {
         private String assigneeId;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
-        private String status;
+        private Status status;
 
         public Builder id(String id) {
             if (id == null || id.isEmpty()) {
                 this.id = UUID.randomUUID().toString();
+            } else {
+                this.id = id;
             }
-            this.id = id;
             return this;
         }
 
@@ -100,15 +145,16 @@ public class Task {
 
         public Builder updatedAt(LocalDateTime updatedAt) {
             if (updatedAt == null) {
-                updatedAt = LocalDateTime.now();
+                this.updatedAt = LocalDateTime.now();
+            } else {
+                this.updatedAt = updatedAt;
             }
-            this.updatedAt = updatedAt;
             return this;
         }
 
-        public Builder status(String status) {
-            if (status == null || status.isEmpty()) {
-                this.status = "TODO";
+        public Builder status(Status status) {
+            if (status == null) {
+                this.status = Status.TODO;
             } else {
                 this.status = status;
             }
@@ -116,7 +162,7 @@ public class Task {
         }
 
         public Task build() {
-            if (this.id == null || this.title == null || this.assigneeId == null) {
+            if (this.title == null || this.assigneeId == null) {
                 throw new IllegalStateException("ID, title, and assignee ID are required");
             }
             return new Task(this);
